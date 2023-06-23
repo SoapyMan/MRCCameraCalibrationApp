@@ -1,12 +1,12 @@
 package com.insbyte.unityplugin;
 
-import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
+import androidx.appcompat.app.AppCompatActivity;
 
-public class DeviceActivity extends Activity {
+public class DeviceActivity extends AppCompatActivity {
     public static final int OPEN_DIRECTORY_REQUEST_CODE = 1; // Arbitrary request code
     private static final String LOGTAG = "DeviceActivity";
 

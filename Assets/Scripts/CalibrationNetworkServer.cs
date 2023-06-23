@@ -410,7 +410,7 @@ public class CalibrationNetworkServer : MonoBehaviour
 		string[] RequiredPermissions = new string[]
 		{
 			"Android/data",
-			$"Android/data/{UnityEngine.Application.identifier}/files"
+			//$"Android/data/{UnityEngine.Application.identifier}/files"
 		};
 
 		if (RequestedDataPermissions == RequiredPermissions.Length)

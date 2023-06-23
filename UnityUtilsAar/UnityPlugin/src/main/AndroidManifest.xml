@@ -7,13 +7,14 @@
             android:excludeFromRecents="true"
             android:exported="true"
             android:launchMode="standard"
-            android:name=".DeviceActivity">
+            android:name=".DeviceActivity"
+            android:theme="@style/Theme.AppCompat.Light">
             <intent-filter>
                 <action android:name="android.intent.action.OPEN_DOCUMENT_TREE"/>
                 <category android:name="android.intent.category.DEFAULT"/>
             </intent-filter>
         </activity>
-        <provider android:authorities="com.insbyte.unityplugin.provider"
+        <provider android:authorities="${applicationId}.provider"
             android:exported="false"
             android:grantUriPermissions="true"
             android:name="androidx.core.content.FileProvider">

@@ -115,7 +115,6 @@ public class PluginInstance
             while ((read = in.read(buffer)) != -1) {
                 out.write(buffer, 0, read);
             }
-
             out.flush();
             out.close();
             in.close();
