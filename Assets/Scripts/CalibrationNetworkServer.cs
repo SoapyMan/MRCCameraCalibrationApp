@@ -65,7 +65,7 @@ public class CalibrationNetworkServer : MonoBehaviour
 	private const int STATE_CHANGE_PAUSE = 39;
 	private const int ADJUST_KEY = 40;
 
-#if ENABLE_QUEST_STORE
+#if ENABLE_QUEST_STORE && UNITY_ANDROID
 	private void EntitlementCallback(Message msg)
 	{
 		if (msg.IsError)
@@ -169,7 +169,7 @@ public class CalibrationNetworkServer : MonoBehaviour
 #if ENABLE_MRC_IN_APP
 		OVRPlugin.InitializeMixedReality();
 #endif
-#if ENABLE_QUEST_STORE
+#if ENABLE_QUEST_STORE && UNITY_ANDROID
 		Users.GetLoggedInUser().OnComplete(GetLoggedInUserCallback);
 #else
 		userId = "0";
@@ -199,7 +199,9 @@ public class CalibrationNetworkServer : MonoBehaviour
 
 	private void Update()
 	{
+#if UNITY_ANDROID
 		RequestDataPermissions();
+#endif
 
 		if (tcpClient != null)
 		{
@@ -355,7 +357,7 @@ public class CalibrationNetworkServer : MonoBehaviour
 			Debug.LogError($"[CalibrationNetworkServer] {ex.Message}");
 		}
 	}
-
+#if UNITY_ANDROID
 	private void ReleaseAllFolderPermissions()
 	{
 		try
@@ -411,6 +413,7 @@ public class CalibrationNetworkServer : MonoBehaviour
 	int NumFramesToStartRequest = 60;
 	private void RequestDataPermissions()
 	{
+
 		string[] RequiredPermissions = new string[]
 		{
 			"Android/data",
@@ -440,9 +443,11 @@ public class CalibrationNetworkServer : MonoBehaviour
 		if(RequestedDataPermissions < RequiredPermissions.Length)
 			RequestFolderPermissions(Path.Combine(storageDir.FullName, RequiredPermissions[RequestedDataPermissions]));
 	}
+#endif
 
 	private void CheckRequestPermissions()
 	{
+#if UNITY_ANDROID
 		AndroidJavaObject activityClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
 		AndroidJavaObject currentActivity = activityClass.GetStatic<AndroidJavaObject>("currentActivity");
 
@@ -457,6 +462,7 @@ public class CalibrationNetworkServer : MonoBehaviour
 		{
 			Debug.LogError($"[CalibrationNetworkServer] {ex.Message}");
 		}
+
 		/*
 		// request storage permissions
 		AndroidJavaClass environment = new AndroidJavaClass("android.os.Environment");
@@ -481,6 +487,7 @@ public class CalibrationNetworkServer : MonoBehaviour
 
 		// Test stuff
 		ReleaseAllFolderPermissions();
+#endif
 	}
 
 	private DirectoryInfo GetExternalStorageDirectory()
@@ -608,8 +615,10 @@ public class CalibrationNetworkServer : MonoBehaviour
 				XmlNode xmlNode = xmlDocument.SelectSingleNode("opencv_storage/camera_id");
 				if (xmlNode != null)
 				{
+#if UNITY_ANDROID
 					try
 					{
+
 						Convert.ToUInt32(xmlNode.Value);
 						string fileName = Path.Combine(thisAppDir.FullName, "mrc.xml");
 						Directory.CreateDirectory(thisAppDir.FullName);
@@ -628,6 +637,16 @@ public class CalibrationNetworkServer : MonoBehaviour
 					{
 						text = "Could not write to files\n" + ex3.Message;
 					}
+#else
+					try
+					{
+						SendCalibrationDataToOVRServer(xmlDocument);
+					}
+					catch (Exception ex2)
+					{
+						text = "Failed to send calibration data\n" + ex2.Message;
+					}
+#endif
 				}
 				else
 				{

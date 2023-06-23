@@ -17,7 +17,7 @@ public class MRCNetworkDiscovery : MonoBehaviour
 
 	private string broadcastMessage = "";
 
-	public float timeInterval = 0.5f;
+	public float timeInterval = 2.0f;
 
 	private float lastBroadcastTime;
 	private UdpClient udpBroadcaster;
@@ -35,25 +35,29 @@ public class MRCNetworkDiscovery : MonoBehaviour
 		float realtimeSinceStartup = Time.realtimeSinceStartup;
 		if (realtimeSinceStartup - lastBroadcastTime > timeInterval)
 		{
-			lastBroadcastTime = realtimeSinceStartup;
-		}
-		else
-		{
-			return;
-		}
+			var msg = CreateMessage();
 
-		var msg = CreateMessage();
+			int numInterfacesBroadcasted = 0;
 
-		var interfaces = NetworkInterface.GetAllNetworkInterfaces();
-		foreach (var iface in interfaces)
-		{
-			if (iface.GetIPProperties().GatewayAddresses.Count > 0)
+			var interfaces = NetworkInterface.GetAllNetworkInterfaces();
+			foreach (var iface in interfaces)
 			{
-				var addr = iface.GetIPProperties().GatewayAddresses[0].Address;
+				if (iface.GetIPProperties().UnicastAddresses.Count == 0)
+					continue;
+
+				// usually gateway addresses are have same base
+				var addr = iface.GetIPProperties().UnicastAddresses[0].Address;
+				if (addr.AddressFamily != AddressFamily.InterNetwork)
+					continue;
 
 				var broadcastIp = new IPAddress(addr.GetAddressBytes().Take(3).Concat(new[] { (byte)255 }).ToArray());
 				udpBroadcaster.Send(msg, msg.Length, broadcastIp.ToString(), broacastPort);
+				numInterfacesBroadcasted++;
 			}
+
+			Debug.Log($"[MRCNetworkDiscovery] Broadcasted message over {numInterfacesBroadcasted} interfaces");
+
+			lastBroadcastTime = realtimeSinceStartup;
 		}
 	}
 
@@ -87,6 +91,8 @@ public class MRCNetworkDiscovery : MonoBehaviour
 	public void StartBroadcast()
 	{
 		udpBroadcaster = new UdpClient();
+		udpBroadcaster.MulticastLoopback = true;
+		udpBroadcaster.EnableBroadcast = true;
 
 		Debug.Log("[MRCNetworkDiscovery] Server Created with default port");
 	}
