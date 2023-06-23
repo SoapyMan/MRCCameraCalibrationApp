@@ -90,11 +90,13 @@ public class MRCNetworkDiscovery : MonoBehaviour
 
 	public void StartBroadcast()
 	{
+		/*
 		udpBroadcaster = new UdpClient();
 		udpBroadcaster.MulticastLoopback = true;
 		udpBroadcaster.EnableBroadcast = true;
-
+		
 		Debug.Log("[MRCNetworkDiscovery] Server Created with default port");
+		*/
 	}
 
 	public void StopBroadcast()

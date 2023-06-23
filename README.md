@@ -9,11 +9,12 @@ What is done:
 - Ported on newer Unity Engine (2022.3.2f1)
 - Added controllers display
 - Added passthrough mode for convinience (works best on Quest Pro and upcoming Quest 3)
-- Fixed few issues with failing `mrc.xml` saving
+- Fixed issues with failing `mrc.xml` not saving in other game folders
 
 Current Issues:
 - Discovery is not working for PC MRC app
-- `mrc.xml` is not saved in every game folder, scoped permissions work as long as you provide access to specific package folder
+- Folder selection window for granting permissions may not work correctly, see [this video](https://www.youtube.com/watch?v=wIoor8jwg9w)
+- You will need to put headset into Stand-by and back to Active again (using Power button) after granting folder permission
 
 Future:
 - Some UI for managing the games permissions we want to calibrate for
