@@ -65,6 +65,7 @@ public class CalibrationNetworkServer : MonoBehaviour
 	private const int STATE_CHANGE_PAUSE = 39;
 	private const int ADJUST_KEY = 40;
 
+#if ENABLE_QUEST_STORE
 	private void EntitlementCallback(Message msg)
 	{
 		if (msg.IsError)
@@ -80,7 +81,6 @@ public class CalibrationNetworkServer : MonoBehaviour
 
 	private void Awake()
 	{
-#if ENABLE_QUEST_STORE
 		try
 		{
 			Core.AsyncInitialize();
@@ -92,7 +92,6 @@ public class CalibrationNetworkServer : MonoBehaviour
 			Debug.LogException(exception);
 			UnityEngine.Application.Quit();
 		}
-#endif
 	}
 
 	private void GetLoggedInUserCallback(Message<User> message)
@@ -106,11 +105,14 @@ public class CalibrationNetworkServer : MonoBehaviour
 
 		userId = message.Data.ID.ToString();
 	}
+#endif
 
 	private void CopyCalibrationToApplications(FileInfo fileInfo)
 	{
 		foreach (DirectoryInfo appDir in appDirs)
 		{
+			// NOTE: Must launch game at least once
+			/*
 			try
 			{
 				appDir.CreateSubdirectory("files");
@@ -118,13 +120,13 @@ public class CalibrationNetworkServer : MonoBehaviour
 			catch (IOException)
 			{
 				Debug.Log($"[CalibrationNetworkServer] {Path.Combine(appDir.FullName, "files")} exists");
-			}
+			}*/
 
 			if (new DirectoryInfo(Path.Combine(appDir.FullName, "files")).Exists)
 			{
 				try
 				{
-					File.Copy(fileInfo.FullName, Path.Combine(appDir.FullName, "files/mrc.xml"), overwrite: false);
+					CopyFile(fileInfo.FullName, Path.Combine(appDir.FullName, "files/mrc.xml"));
 					Debug.Log("[CalibrationNetworkServer] MRC calibration copied to " + Path.Combine(appDir.FullName, "files/mrc.xml"));
 				}
 				catch (Exception)
@@ -332,16 +334,49 @@ public class CalibrationNetworkServer : MonoBehaviour
 		return secondaryButtonPressedTimes;
 	}
 
-	private bool HasDataPermissions()
+	private void CopyFile(string from, string to)
 	{
-		//AndroidJNI.AttachCurrentThread();
+		if (from.Equals(to))
+			return;
+
+		try
+		{
+			AndroidJavaObject activityClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+			AndroidJavaObject pluginInstanceClass = new AndroidJavaClass("com.insbyte.unityplugin.PluginInstance");
+
+			pluginInstanceClass.CallStatic("copyFile", from, to);
+		}
+		catch (Exception ex)
+		{
+			Debug.LogError($"[CalibrationNetworkServer] {ex.Message}");
+		}
+	}
+
+	private void ReleaseAllFolderPermissions()
+	{
 		try
 		{
 			AndroidJavaObject activityClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
 			AndroidJavaObject currentActivity = activityClass.GetStatic<AndroidJavaObject>("currentActivity");
 			AndroidJavaObject pluginInstanceClass = new AndroidJavaClass("com.insbyte.unityplugin.PluginInstance");
 
-			return pluginInstanceClass.CallStatic<bool>("hasAccessToFolder", Path.Combine(storageDir.FullName, "Android/data"));
+			pluginInstanceClass.CallStatic("releaseAllPermissions");
+		}
+		catch (Exception ex)
+		{
+			Debug.LogError($"[CalibrationNetworkServer] {ex.Message}");
+		}
+	}
+
+	private bool HasFolderPermissions(string directory)
+	{
+		try
+		{
+			AndroidJavaObject activityClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+			AndroidJavaObject currentActivity = activityClass.GetStatic<AndroidJavaObject>("currentActivity");
+			AndroidJavaObject pluginInstanceClass = new AndroidJavaClass("com.insbyte.unityplugin.PluginInstance");
+
+			return pluginInstanceClass.CallStatic<bool>("hasAccessToFolder", directory);
 		}
 		catch (Exception ex)
 		{
@@ -350,14 +385,37 @@ public class CalibrationNetworkServer : MonoBehaviour
 		return false;
 	}
 
-	bool RequestedDataPermissions = false;
+	private void RequestFolderPermissions(string directory)
+	{
+		try
+		{
+			AndroidJavaObject activityClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+			AndroidJavaObject currentActivity = activityClass.GetStatic<AndroidJavaObject>("currentActivity");
+			AndroidJavaObject pluginInstanceClass = new AndroidJavaClass("com.insbyte.unityplugin.PluginInstance");
+
+			pluginInstanceClass.CallStatic("askForAccess", directory);
+		}
+		catch (Exception ex)
+		{
+			Debug.LogError($"[CalibrationNetworkServer] {ex.Message}");
+		}
+	}
+
+	int RequestedDataPermissions = 0;
+
 	bool GotDataPermissions = false;
 	int NumFramesToStartRequest = 60;
 	private void RequestDataPermissions()
 	{
-		if (RequestedDataPermissions)
+		string[] RequiredPermissions = new string[]
 		{
-			if (!GotDataPermissions && HasDataPermissions())
+			"Android/data",
+			$"Android/data/{UnityEngine.Application.identifier}/files"
+		};
+
+		if (RequestedDataPermissions == RequiredPermissions.Length)
+		{
+			if (!GotDataPermissions)
 			{
 				UpdateCalibrationFiles();
 				GotDataPermissions = true;
@@ -370,50 +428,21 @@ public class CalibrationNetworkServer : MonoBehaviour
 			NumFramesToStartRequest--;
 			return;
 		}
-		RequestedDataPermissions = true;
+		NumFramesToStartRequest = 0;
 
-		//AndroidJNI.AttachCurrentThread();
-		try
-		{
-			AndroidJavaObject activityClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
-			AndroidJavaObject currentActivity = activityClass.GetStatic<AndroidJavaObject>("currentActivity");
-			AndroidJavaObject pluginInstanceClass = new AndroidJavaClass("com.insbyte.unityplugin.PluginInstance");
+		if (HasFolderPermissions(Path.Combine(storageDir.FullName, RequiredPermissions[RequestedDataPermissions])))
+			RequestedDataPermissions++; // time to request next permission
 
-			pluginInstanceClass.CallStatic("askForAccess", Path.Combine(storageDir.FullName, "Android/data"));
-		}
-		catch (Exception ex)
-		{
-			Debug.LogError($"[CalibrationNetworkServer] {ex.Message}");
-		}
-
-		//AndroidJNI.DetachCurrentThread();
+		if(RequestedDataPermissions < RequiredPermissions.Length)
+			RequestFolderPermissions(Path.Combine(storageDir.FullName, RequiredPermissions[RequestedDataPermissions]));
 	}
 
 	private void CheckRequestPermissions()
 	{
-		if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead) ||
-			!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageWrite))
-		{
-			Permission.RequestUserPermissions(new[] {
-				Permission.ExternalStorageRead,
-				Permission.ExternalStorageWrite
-			});
-		}
-
 		AndroidJavaObject activityClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
 		AndroidJavaObject currentActivity = activityClass.GetStatic<AndroidJavaObject>("currentActivity");
 
-		AndroidJavaClass environment = new AndroidJavaClass("android.os.Environment");
-		if (!environment.CallStatic<bool>("isExternalStorageManager"))
-		{
-			string manageAppFilesAccess = new AndroidJavaClass("android.provider.Settings").GetStatic<string>("ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION");
-
-			AndroidJavaObject intentUri = new AndroidJavaClass("android.net.Uri").CallStatic<AndroidJavaObject>("parse", $"package:{UnityEngine.Application.identifier}");
-
-			var intent = new AndroidJavaObject("android.content.Intent", manageAppFilesAccess, intentUri);
-			currentActivity.Call("startActivity", intent);
-		}
-
+		// initialize plugin instance
 		try
 		{
 			// TODO: make a shim
@@ -425,28 +454,29 @@ public class CalibrationNetworkServer : MonoBehaviour
 			Debug.LogError($"[CalibrationNetworkServer] {ex.Message}");
 		}
 
-		/*
-		// No Java code
-		try
+		// Test stuff
+		ReleaseAllFolderPermissions();
+
+		if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead) ||
+			!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageWrite))
 		{
-			var intentClass = new AndroidJavaClass("android.content.Intent");
-			int FLAG_GRANT_READ_URI_PERMISSION = intentClass.GetStatic<int>("FLAG_GRANT_READ_URI_PERMISSION");
-			int FLAG_GRANT_WRITE_URI_PERMISSION = intentClass.GetStatic<int>("FLAG_GRANT_WRITE_URI_PERMISSION");
-
-			AndroidJavaObject activityClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
-			AndroidJavaObject currentActivity = activityClass.GetStatic<AndroidJavaObject>("currentActivity");
-			AndroidJavaObject contentResolver = currentActivity.Call<AndroidJavaObject>("getContentResolver");
-
-			AndroidJavaObject uri = new AndroidJavaClass("android.net.Uri").CallStatic<AndroidJavaObject>("parse", Path.Combine(storageDir.FullName, "Android/data"));
-
-			int permFlags = FLAG_GRANT_READ_URI_PERMISSION | FLAG_GRANT_WRITE_URI_PERMISSION;
-			//activityClass.Call("grantUriPermission", UnityEngine.Application.identifier, uri, permFlags);
-			contentResolver.Call("takePersistableUriPermission", uri, permFlags);
+			Permission.RequestUserPermissions(new[] {
+				Permission.ExternalStorageRead,
+				Permission.ExternalStorageWrite
+			});
 		}
-		catch (Exception ex)
+
+		// request storage permissions
+		AndroidJavaClass environment = new AndroidJavaClass("android.os.Environment");
+		if (!environment.CallStatic<bool>("isExternalStorageManager"))
 		{
-			Debug.LogError($"[CalibrationNetworkServer] {ex.Message}");
-		}*/
+			string manageAppFilesAccess = new AndroidJavaClass("android.provider.Settings").GetStatic<string>("ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION");
+
+			AndroidJavaObject intentUri = new AndroidJavaClass("android.net.Uri").CallStatic<AndroidJavaObject>("parse", $"package:{UnityEngine.Application.identifier}");
+
+			var intent = new AndroidJavaObject("android.content.Intent", manageAppFilesAccess, intentUri);
+			currentActivity.Call("startActivity", intent);
+		}
 	}
 
 	private DirectoryInfo GetExternalStorageDirectory()

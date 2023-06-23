@@ -195,6 +195,30 @@ public class OVRNetwork
             return false;
         }
 
+        public void ForEachClient(Action<TcpClient> eachClientAction)
+        {
+			lock (clientsLock)
+			{
+				foreach (TcpClient client in clients)
+				{
+					if (client.Connected)
+					{
+						try
+						{
+							eachClientAction(client);
+						}
+						catch (SocketException e)
+						{
+							Debug.LogWarningFormat("[OVRNetworkTcpServer] close client because of socket error: {0}",
+								e.Message);
+							client.GetStream().Close();
+							client.Close();
+						}
+					}
+				}
+			}
+		}
+
         public void Broadcast(int payloadType, byte[] payload)
         {
             if (payload.Length > OVRNetwork.MaxPayloadLength)

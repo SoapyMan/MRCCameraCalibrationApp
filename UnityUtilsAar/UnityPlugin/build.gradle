@@ -1,0 +1,57 @@
+plugins {
+    id 'com.android.library'
+}
+
+android {
+    namespace 'com.insbyte.unityplugin'
+    compileSdk 32
+
+    defaultConfig {
+        minSdk 29
+        targetSdk 32
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.5.0'
+    implementation 'com.google.android.material:material:1.9.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+}
+
+task copyAARDebug(type: Copy) {
+    // build/outputs/aar
+    from    ( [buildDir.absolutePath, 'outputs', 'aar'].join(File.separator) )
+    include ( "${project.name}-debug.aar" )
+    into    ( [rootDir.absolutePath, '..', 'Assets', 'Plugins', 'Android'].join(File.separator) )
+    rename  ("${project.name}-debug.aar", 'unityplugin.aar')
+}
+
+task copyAARRelease(type: Copy) {
+    // build/outputs/aar
+    from    ( [buildDir.absolutePath, 'outputs', 'aar'].join(File.separator) )
+    include ( "${project.name}-release.aar" )
+    into    ( [rootDir.absolutePath, '..', 'Assets', 'Plugins', 'Android'].join(File.separator) )
+    rename  ("${project.name}-release.aar", 'unityplugin.aar')
+}
+
+afterEvaluate {
+    assembleDebug.finalizedBy('copyAARDebug')
+    assembleRelease.finalizedBy('copyAARRelease')
+}
