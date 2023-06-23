@@ -410,11 +410,10 @@ public class CalibrationNetworkServer : MonoBehaviour
 
 	int RequestedDataPermissions = 0;
 
-	bool GotDataPermissions = false;
+	bool CalibrationFilesUpToDate = false;
 	int NumFramesToStartRequest = 60;
 	private void RequestDataPermissions()
 	{
-
 		string[] RequiredPermissions = new string[]
 		{
 			"Android/data",
@@ -423,10 +422,10 @@ public class CalibrationNetworkServer : MonoBehaviour
 
 		if (RequestedDataPermissions == RequiredPermissions.Length)
 		{
-			if (!GotDataPermissions)
+			if (!CalibrationFilesUpToDate)
 			{
 				UpdateCalibrationFiles();
-				GotDataPermissions = true;
+				CalibrationFilesUpToDate = true;
 			}
 			return;
 		}
@@ -624,12 +623,7 @@ public class CalibrationNetworkServer : MonoBehaviour
 						Debug.Log($"[CalibrationNetworkServer] Writing camera calibration to {fileName}");
 						File.WriteAllText(fileName, @string);
 
-						FileInfo fileInfo = new FileInfo(fileName);
-						if (fileInfo.Exists)
-						{
-							Debug.Log("[CalibrationNetworkServer] applying to apps");
-							CopyCalibrationToApplications(fileInfo);
-						}
+						CalibrationFilesUpToDate = false;
 					}
 					catch (Exception ex3)
 					{
