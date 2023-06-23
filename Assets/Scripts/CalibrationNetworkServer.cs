@@ -341,22 +341,23 @@ public class CalibrationNetworkServer : MonoBehaviour
 		if (from.Equals(to))
 			return;
 
-		// File.Copy(from, to, true);
-
+#if UNITY_ANDROID
 		try
 		{
 			AndroidJavaObject activityClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
 			AndroidJavaObject pluginInstanceClass = new AndroidJavaClass("com.insbyte.unityplugin.PluginInstance");
 
-			string fileData = File.ReadAllText(from);
-
-			pluginInstanceClass.CallStatic("writeFile", fileData, to);
+			pluginInstanceClass.CallStatic("copyFile", from, to);
 		}
 		catch (Exception ex)
 		{
 			Debug.LogError($"[CalibrationNetworkServer] {ex.Message}");
 		}
+#else
+		File.Copy(from, to, true);
+#endif
 	}
+
 #if UNITY_ANDROID
 	private void ReleaseAllFolderPermissions()
 	{
@@ -474,7 +475,7 @@ public class CalibrationNetworkServer : MonoBehaviour
 			var intent = new AndroidJavaObject("android.content.Intent", manageAppFilesAccess, intentUri);
 			currentActivity.Call("startActivity", intent);
 		}
-
+		*/
 		if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead) ||
 			!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageWrite))
 		{
@@ -483,10 +484,7 @@ public class CalibrationNetworkServer : MonoBehaviour
 				Permission.ExternalStorageWrite
 			});
 		}
-		*/
-
-		// Test stuff
-		ReleaseAllFolderPermissions();
+	
 #endif
 	}
 

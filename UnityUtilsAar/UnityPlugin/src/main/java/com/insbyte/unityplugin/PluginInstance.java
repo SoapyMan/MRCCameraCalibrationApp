@@ -85,47 +85,11 @@ public class PluginInstance
         }
     }
 
-    public static void writeFile(String contents, String to)
-    {
-        try {
-            Log.d("PluginInstance", "writeFile to " + to);
-
-            List<UriPermission> permissionList = mActivity.getContentResolver().getPersistedUriPermissions();
-
-            Log.d("PluginInstance", "Perm check before copy:");
-            for (UriPermission p : permissionList) {
-                Log.d("PluginInstance", " ---  " + p.toString());
-            }
-
-            Log.d("PluginInstance", "attempting getOutputStream " + to);
-            OutputStream out = getOutputStream(to);
-
-            if (out == null) {
-                Log.w("PluginInstance", "writeFile - no output stream");
-                return;
-            }
-
-            out.write(contents.getBytes(StandardCharsets.UTF_8));
-
-            out.flush();
-            out.close();
-        } catch (Exception e) {
-            Log.e("PluginInstance", "writeFile failed", e);
-        }
-    }
-
     public static void copyFile(String from, String to)
     {
         try {
             Log.d("PluginInstance", "copyFile from " + from);
             Log.d("PluginInstance", "copyFile to " + to);
-
-            List<UriPermission> permissionList = mActivity.getContentResolver().getPersistedUriPermissions();
-
-            Log.d("PluginInstance", "Perm check before copy:");
-            for (UriPermission p : permissionList) {
-                Log.d("PluginInstance", " ---  " + p.toString());
-            }
 
             Log.d("PluginInstance", "attempting getOutputStream " + to);
             OutputStream out = getOutputStream(to);
@@ -135,8 +99,8 @@ public class PluginInstance
                 return;
             }
 
-            Log.d("PluginInstance", "attempting openInputStream " + from);
-            InputStream in = mActivity.getContentResolver().openInputStream(getContentFromPath(from, true));
+            Log.d("PluginInstance", "attempting getInputStream " + from);
+            InputStream in = getInputStream(from);
 
             byte[] buffer = new byte[1024];
             int read;
@@ -169,57 +133,74 @@ public class PluginInstance
             return DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", documentId);
     }
 
-    private static DocumentFile getAccessToFile(String dir) {
-        DocumentFile startDir = DocumentFile.fromTreeUri(mActivity, getContentFromPath(dir, true));
+    private static DocumentFile getAccessToFile(String dir, boolean createFolders) {
+        Uri dirUri =  getContentFromPath(dir, true);
+        List<UriPermission> permissionList = mActivity.getContentResolver().getPersistedUriPermissions();
 
-        if(startDir != null) {
-            return startDir;
-        }
-
-        // try create folder structure
-        String diff = dir.replace(dir, "");
-        if (diff.startsWith("/")) {
-            diff = diff.substring(1);
-        }
-        String[] dirs = diff.split("/");
-
-        DocumentFile currentDir = startDir;
-        for (String dirName : dirs) {
-            if(dirName.equals("")) {
-                continue;
+        // https://stackoverflow.com/questions/46871458/no-permission-to-subfolders-to-write-files-with-documentfile-after-granting-perm
+        for(UriPermission p : permissionList) {
+            // start process from URI
+            if(p.getUri().equals(dirUri)) {
+                return DocumentFile.fromTreeUri(mActivity, dirUri);
             }
-            if (currentDir.findFile(dirName) == null) {
-                currentDir.createDirectory(dirName); // Create directory if it doesn't exist
+
+            // try to find target directory through structure
+            String permUriPath = new File(p.getUri().getPath()).getAbsolutePath();
+            String dirUriPath = new File(dirUri.getPath()).getAbsolutePath();
+            String[] dirList = dirUriPath.substring(permUriPath.length()).substring(1).split("/");
+
+            Log.w("PluginInstance", "permUriPath: " + permUriPath);
+            Log.w("PluginInstance", "dirUriPath: " + permUriPath);
+            Log.w("PluginInstance", "sub: " + dirUriPath.substring(permUriPath.length()).substring(1));
+
+            DocumentFile currentDir = DocumentFile.fromTreeUri(mActivity, p.getUri());
+            for (String dirName : dirList) {
+                if (currentDir.findFile(dirName) == null) {
+                    if(!createFolders)
+                        return null;
+
+                    currentDir.createDirectory(dirName); // Create directory if it doesn't exist
+                }
+                currentDir = currentDir.findFile(dirName);
             }
-            currentDir = currentDir.findFile(dirName);
+            return currentDir;
         }
-        return currentDir;
+
+        // still return a document file directly
+        // but it won't have permissions
+        return DocumentFile.fromTreeUri(mActivity, dirUri);
     }
 
-    private static OutputStream getOutputStream(String path) {
-        DocumentFile directory = getAccessToFile(new File(path).getParent());
-        String name = new File(path).getName();
+    private static InputStream getInputStream(String path) {
+        DocumentFile file = getAccessToFile(path, false);
 
-        DocumentFile file = directory.findFile(name);
-        if (file == null) {
+        if (file != null) {
             try {
-                Uri fileUri = DocumentsContract.createDocument(mActivity.getContentResolver(), directory.getUri(), "application/octet-stream", name);
-                return mActivity.getContentResolver().openOutputStream(fileUri);
+                return mActivity.getContentResolver().openInputStream(file.getUri());
             } catch (FileNotFoundException e) {
                 Log.e("PluginInstance", "getOutputStream createNew failed", e);
             }
-        } else {
-            try {
-                Uri fileUri = file.getUri();
-                // file.delete()
-                OutputStream stream = mActivity.getContentResolver().openOutputStream(fileUri);
-
-                return stream;
-            } catch (FileNotFoundException e) {
-                Log.e("PluginInstance", "getOutputStream overwrite failed", e);
-            }
         }
 
+        Log.w("PluginInstance", "file was not found: " + path);
+
+        return null;
+    }
+
+    private static OutputStream getOutputStream(String path) {
+        DocumentFile directory = getAccessToFile(new File(path).getParent(), true);
+        String name = new File(path).getName();
+
+        DocumentFile file = directory.findFile(name);
+        if (file != null) {
+            file.delete();
+        }
+
+        try {
+            return mActivity.getContentResolver().openOutputStream(directory.createFile("application/octet-stream", name).getUri());
+        } catch (FileNotFoundException e) {
+            Log.e("PluginInstance", "getOutputStream createNew failed", e);
+        }
 
         return null;
     }
