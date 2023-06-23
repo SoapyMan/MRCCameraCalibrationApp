@@ -339,12 +339,16 @@ public class CalibrationNetworkServer : MonoBehaviour
 		if (from.Equals(to))
 			return;
 
+		// File.Copy(from, to, true);
+
 		try
 		{
 			AndroidJavaObject activityClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
 			AndroidJavaObject pluginInstanceClass = new AndroidJavaClass("com.insbyte.unityplugin.PluginInstance");
 
-			pluginInstanceClass.CallStatic("copyFile", from, to);
+			string fileData = File.ReadAllText(from);
+
+			pluginInstanceClass.CallStatic("writeFile", fileData, to);
 		}
 		catch (Exception ex)
 		{
@@ -453,9 +457,17 @@ public class CalibrationNetworkServer : MonoBehaviour
 		{
 			Debug.LogError($"[CalibrationNetworkServer] {ex.Message}");
 		}
+		/*
+		// request storage permissions
+		AndroidJavaClass environment = new AndroidJavaClass("android.os.Environment");
+		if (!environment.CallStatic<bool>("isExternalStorageManager"))
+		{
+			string manageAppFilesAccess = new AndroidJavaClass("android.provider.Settings").GetStatic<string>("ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION");
+			AndroidJavaObject intentUri = new AndroidJavaClass("android.net.Uri").CallStatic<AndroidJavaObject>("parse", $"package:{UnityEngine.Application.identifier}");
 
-		// Test stuff
-		ReleaseAllFolderPermissions();
+			var intent = new AndroidJavaObject("android.content.Intent", manageAppFilesAccess, intentUri);
+			currentActivity.Call("startActivity", intent);
+		}
 
 		if (!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageRead) ||
 			!Permission.HasUserAuthorizedPermission(Permission.ExternalStorageWrite))
@@ -465,25 +477,16 @@ public class CalibrationNetworkServer : MonoBehaviour
 				Permission.ExternalStorageWrite
 			});
 		}
+		*/
 
-		// request storage permissions
-		AndroidJavaClass environment = new AndroidJavaClass("android.os.Environment");
-		if (!environment.CallStatic<bool>("isExternalStorageManager"))
-		{
-			string manageAppFilesAccess = new AndroidJavaClass("android.provider.Settings").GetStatic<string>("ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION");
-
-			AndroidJavaObject intentUri = new AndroidJavaClass("android.net.Uri").CallStatic<AndroidJavaObject>("parse", $"package:{UnityEngine.Application.identifier}");
-
-			var intent = new AndroidJavaObject("android.content.Intent", manageAppFilesAccess, intentUri);
-			currentActivity.Call("startActivity", intent);
-		}
+		// Test stuff
+		ReleaseAllFolderPermissions();
 	}
 
 	private DirectoryInfo GetExternalStorageDirectory()
 	{
 		AndroidJavaClass environment = new AndroidJavaClass("android.os.Environment");
 		AndroidJavaObject directory = environment.CallStatic<AndroidJavaObject>("getExternalStorageDirectory");
-		
 		string externalFilesDir = directory.Call<string>("getPath");
 
 		return new DirectoryInfo(externalFilesDir);

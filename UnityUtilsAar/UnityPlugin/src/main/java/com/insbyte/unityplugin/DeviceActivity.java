@@ -1,18 +1,53 @@
 package com.insbyte.unityplugin;
 
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.provider.DocumentsContract;
 import android.util.Log;
-import androidx.appcompat.app.AppCompatActivity;
 
-public class DeviceActivity extends AppCompatActivity {
-    public static final int OPEN_DIRECTORY_REQUEST_CODE = 1; // Arbitrary request code
+import androidx.activity.ComponentActivity;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+public class DeviceActivity extends ComponentActivity {
     private static final String LOGTAG = "DeviceActivity";
 
     public static Uri selectedPath;
     public static int flags;
     public static boolean isOpen = false;
+
+    private final ActivityResultLauncher<Uri> mDirRequest = registerForActivityResult(
+            new ActivityResultContracts.OpenDocumentTree() {
+                @NonNull
+                @Override
+                public Intent createIntent (@NonNull Context context, @Nullable Uri input) {
+                    super.createIntent(context, input);
+                    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && input != null) {
+                        intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, input);
+                    }
+                    Log.i(LOGTAG, "createIntent logic");
+                    return intent;
+                }
+            },
+            uri -> {
+                Log.i(LOGTAG, "onActivityResult: " + uri);
+                if (uri != null) {
+                    // call this to persist permission across device reboots
+                    getContentResolver().takePersistableUriPermission(uri, flags);
+                    // do your stuff
+                } else {
+                    // request denied by user
+                }
+                isOpen = false;
+                finish();
+            }
+    );
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -25,48 +60,7 @@ public class DeviceActivity extends AppCompatActivity {
         super.onPostResume();
         Log.i(LOGTAG, "onResume");
 
-        try
-        {
-            Log.i(LOGTAG, "making sub intent");
-            Intent subIntent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
-            subIntent.putExtra("android.provider.extra.INITIAL_URI", selectedPath);
-
-            Log.i(LOGTAG, "starting sub intent request");
-            startActivityForResult(subIntent, OPEN_DIRECTORY_REQUEST_CODE);
-
-        }
-        catch (Exception e)
-        {
-            Log.i(LOGTAG,"error: " + e.getLocalizedMessage());
-        }
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (resultCode == RESULT_OK && requestCode == OPEN_DIRECTORY_REQUEST_CODE && data != null) {
-            Log.i(LOGTAG,"onActivityResult");
-            try {
-                Log.d("PluginInstance", "grantUriPermission check");
-                PluginInstance.mActivity.grantUriPermission(PluginInstance.mActivity.getPackageName(), data.getData(), flags);
-
-            } catch (Exception e) {
-                Log.w(LOGTAG, "onActivityResult", e);
-            }
-            try {
-                PluginInstance.mActivity.getContentResolver().takePersistableUriPermission(data.getData(), flags);
-
-                Log.d("PluginInstance", "grantUriPermission check 2");
-                PluginInstance.mActivity.grantUriPermission(PluginInstance.mActivity.getPackageName(), data.getData(), flags);
-
-            } catch (Exception e) {
-                Log.e(LOGTAG, "onActivityResult", e);
-            }
-        }
-
-        isOpen = false;
-
-        super.onActivityResult(requestCode, resultCode, data);
-
-        finish();
+        mDirRequest.launch(selectedPath);
+        //finish();
     }
 }

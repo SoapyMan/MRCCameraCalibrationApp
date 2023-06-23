@@ -13,6 +13,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public class PluginInstance
@@ -69,8 +70,6 @@ public class PluginInstance
         }
 
         try {
-
-
             DeviceActivity.isOpen = true;
             DeviceActivity.selectedPath = getContentFromPath(path, false);
             DeviceActivity.flags = flags;
@@ -79,10 +78,39 @@ public class PluginInstance
                 Intent intent = new Intent();
                 intent.setAction(Intent.ACTION_SEND);
                 intent.setClass(mActivity, DeviceActivity.class);
-                mActivity.startActivityForResult(intent, 22);
+                mActivity.startActivity(intent);
             });
         } catch (Exception e) {
             Log.e("PluginInstance", "askForAccess failed", e);
+        }
+    }
+
+    public static void writeFile(String contents, String to)
+    {
+        try {
+            Log.d("PluginInstance", "writeFile to " + to);
+
+            List<UriPermission> permissionList = mActivity.getContentResolver().getPersistedUriPermissions();
+
+            Log.d("PluginInstance", "Perm check before copy:");
+            for (UriPermission p : permissionList) {
+                Log.d("PluginInstance", " ---  " + p.toString());
+            }
+
+            Log.d("PluginInstance", "attempting getOutputStream " + to);
+            OutputStream out = getOutputStream(to);
+
+            if (out == null) {
+                Log.w("PluginInstance", "writeFile - no output stream");
+                return;
+            }
+
+            out.write(contents.getBytes(StandardCharsets.UTF_8));
+
+            out.flush();
+            out.close();
+        } catch (Exception e) {
+            Log.e("PluginInstance", "writeFile failed", e);
         }
     }
 
@@ -95,7 +123,7 @@ public class PluginInstance
             List<UriPermission> permissionList = mActivity.getContentResolver().getPersistedUriPermissions();
 
             Log.d("PluginInstance", "Perm check before copy:");
-            for(UriPermission p : permissionList) {
+            for (UriPermission p : permissionList) {
                 Log.d("PluginInstance", " ---  " + p.toString());
             }
 
@@ -142,7 +170,7 @@ public class PluginInstance
     }
 
     private static DocumentFile getAccessToFile(String dir) {
-        DocumentFile startDir = DocumentFile.fromTreeUri(mActivity.getApplicationContext(), getContentFromPath(dir, true));
+        DocumentFile startDir = DocumentFile.fromTreeUri(mActivity, getContentFromPath(dir, true));
 
         if(startDir != null) {
             return startDir;
@@ -173,16 +201,26 @@ public class PluginInstance
         String name = new File(path).getName();
 
         DocumentFile file = directory.findFile(name);
-        if (file != null) {
-            file.delete();
+        if (file == null) {
+            try {
+                Uri fileUri = DocumentsContract.createDocument(mActivity.getContentResolver(), directory.getUri(), "application/octet-stream", name);
+                return mActivity.getContentResolver().openOutputStream(fileUri);
+            } catch (FileNotFoundException e) {
+                Log.e("PluginInstance", "getOutputStream createNew failed", e);
+            }
+        } else {
+            try {
+                Uri fileUri = file.getUri();
+                // file.delete()
+                OutputStream stream = mActivity.getContentResolver().openOutputStream(fileUri);
+
+                return stream;
+            } catch (FileNotFoundException e) {
+                Log.e("PluginInstance", "getOutputStream overwrite failed", e);
+            }
         }
 
-        try {
-            Uri fileUri = DocumentsContract.createDocument(mActivity.getContentResolver(), directory.getUri(), "application/octet-stream", name);
-            return mActivity.getContentResolver().openOutputStream(fileUri);
-        } catch (FileNotFoundException e) {
-            Log.e("PluginInstance", "getOutputStream failed", e);
-        }
+
         return null;
     }
 }
