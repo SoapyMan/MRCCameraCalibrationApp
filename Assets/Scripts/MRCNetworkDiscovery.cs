@@ -37,9 +37,6 @@ public class MRCNetworkDiscovery : MonoBehaviour
 			var msg = CreateMessage();
 
 			udpBroadcaster.Send(msg, msg.Length, new IPEndPoint(new IPAddress(new byte[] { 255, 255, 255, 255 }), broacastPort));
-
-			Debug.Log($"[MRCNetworkDiscovery] Broadcasted message over all interfaces");
-
 			lastBroadcastTime = realtimeSinceStartup;
 		}
 	}
