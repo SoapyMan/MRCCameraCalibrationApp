@@ -12,7 +12,6 @@ What is done:
 - Fixed issues with failing `mrc.xml` not saving in other game folders
 
 Current Issues:
-- Discovery is not working for PC MRC app
 - Folder selection window for granting permissions may not work correctly, see [this video](https://www.youtube.com/watch?v=wIoor8jwg9w)
 - You will need to put headset into Stand-by and back to Active again (using Power button) after granting folder permission
 
