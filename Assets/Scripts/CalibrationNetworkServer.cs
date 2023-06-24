@@ -39,7 +39,7 @@ public class CalibrationNetworkServer : MonoBehaviour
 	private List<DirectoryInfo> appDirs;
 
 	public int serverListeningPort = 25671;
-	public float timeInterval = 0.03333f;
+	private float timeInterval = 1.0f / 30.0f;
 
 	private OVRNetwork.OVRNetworkTcpServer tcpServer;
 	private OVRNetwork.OVRNetworkTcpClient tcpClient;
@@ -65,7 +65,7 @@ public class CalibrationNetworkServer : MonoBehaviour
 	private const int STATE_CHANGE_PAUSE = 39;
 	private const int ADJUST_KEY = 40;
 
-#if ENABLE_QUEST_STORE && UNITY_ANDROID
+#if ENABLE_QUEST_STORE
 	private void EntitlementCallback(Message msg)
 	{
 		if (msg.IsError)
@@ -106,50 +106,6 @@ public class CalibrationNetworkServer : MonoBehaviour
 		userId = message.Data.ID.ToString();
 	}
 #endif
-
-	private void CopyCalibrationToApplications(FileInfo fileInfo)
-	{
-		foreach (DirectoryInfo appDir in appDirs)
-		{
-			// NOTE: Must launch game at least once
-			/*
-			try
-			{
-				appDir.CreateSubdirectory("files");
-			}
-			catch (IOException)
-			{
-				Debug.Log($"[CalibrationNetworkServer] {Path.Combine(appDir.FullName, "files")} exists");
-			}*/
-
-			if (new DirectoryInfo(Path.Combine(appDir.FullName, "files")).Exists)
-			{
-				try
-				{
-					CopyFile(fileInfo.FullName, Path.Combine(appDir.FullName, "files/mrc.xml"));
-					Debug.Log("[CalibrationNetworkServer] MRC calibration copied to " + Path.Combine(appDir.FullName, "files/mrc.xml"));
-				}
-				catch (Exception)
-				{
-					Debug.Log("[CalibrationNetworkServer] Cannot copy MRC config to " + Path.Combine(appDir.FullName, "files/mrc.xml"));
-				}
-			}
-			else
-			{
-				Debug.Log($"[CalibrationNetworkServer] {Path.Combine(appDir.FullName, "files")} is not valid");
-			}
-		}
-	}
-
-	private void UpdateCalibrationFiles()
-	{
-		FileInfo fileInfo = new FileInfo(Path.Combine(thisAppDir.FullName, "mrc.xml"));
-		if (fileInfo.Exists)
-		{
-			Debug.Log("[CalibrationNetworkServer] Saved MRC Calibration Found, applying to apps");
-			CopyCalibrationToApplications(fileInfo);
-		}
-	}
 
 	private void Start()
 	{
@@ -197,21 +153,31 @@ public class CalibrationNetworkServer : MonoBehaviour
 		}
 	}
 
+	// queue for not running Android JNI functions in another thread
+	private Queue<Action> actions = new Queue<Action>();
+
 	private void Update()
 	{
-#if UNITY_ANDROID
 		RequestDataPermissions();
-#endif
+
+		lock(actions)
+		{
+			while(actions.Count > 0)
+			{
+				Action action = actions.Dequeue();
+				action.Invoke();
+			}
+		}
 
 		if (tcpClient != null)
 		{
 			tcpClient.Tick();
 		}
 
-		if (tcpServer != null && tcpServer.HasConnectedClient())
+		if (tcpServer != null && HasConnectedClient())
 		{
-			float realtimeSinceStartup = Time.realtimeSinceStartup;
-			if (realtimeSinceStartup - lastBroadcastTime > timeInterval)
+			float realtimeSinceStartup = Time.timeSinceLevelLoad;
+			if (realtimeSinceStartup > lastBroadcastTime + timeInterval)
 			{
 				byte[] bytes = BitConverter.GetBytes(DataVersion);
 				tcpServer.Broadcast(DATA_VERSION, bytes);
@@ -259,63 +225,56 @@ public class CalibrationNetworkServer : MonoBehaviour
 				currentBroadcstFrameIndex++;
 				lastBroadcastTime = realtimeSinceStartup;
 			}
-		}
 
-		AdjustKey adjustKey = AdjustKey.None;
-		if (OVRInput.Get(OVRInput.Button.PrimaryThumbstickUp, OVRInput.Controller.RTouch))
-		{
-			adjustKey = ((!OVRInput.Get(OVRInput.Button.PrimaryHandTrigger, OVRInput.Controller.RTouch)) ? AdjustKey.Up : AdjustKey.PitchIncrease);
-		}
-		else if (OVRInput.Get(OVRInput.Button.PrimaryThumbstickDown, OVRInput.Controller.RTouch))
-		{
-			adjustKey = (OVRInput.Get(OVRInput.Button.PrimaryHandTrigger, OVRInput.Controller.RTouch) ? AdjustKey.PitchDecrease : AdjustKey.Down);
-		}
-		else if (OVRInput.Get(OVRInput.Button.PrimaryThumbstickLeft, OVRInput.Controller.RTouch))
-		{
-			adjustKey = (OVRInput.Get(OVRInput.Button.PrimaryHandTrigger, OVRInput.Controller.RTouch) ? AdjustKey.RollIncrease : AdjustKey.Left);
-		}
-		else if (OVRInput.Get(OVRInput.Button.PrimaryThumbstickRight, OVRInput.Controller.RTouch))
-		{
-			adjustKey = (OVRInput.Get(OVRInput.Button.PrimaryHandTrigger, OVRInput.Controller.RTouch) ? AdjustKey.RollDecrease : AdjustKey.Right);
-		}
-		else if (OVRInput.Get(OVRInput.Button.Two, OVRInput.Controller.RTouch))
-		{
-			adjustKey = (OVRInput.Get(OVRInput.Button.PrimaryHandTrigger, OVRInput.Controller.RTouch) ? AdjustKey.YawIncrease : AdjustKey.Forward);
-		}
-		else if (OVRInput.Get(OVRInput.Button.One, OVRInput.Controller.RTouch))
-		{
-			adjustKey = (OVRInput.Get(OVRInput.Button.PrimaryHandTrigger, OVRInput.Controller.RTouch) ? AdjustKey.YawDecrease : AdjustKey.Backward);
-		}
-		else if (OVRInput.Get(OVRInput.Button.PrimaryThumbstick, OVRInput.Controller.RTouch))
-		{
-			adjustKey = (OVRInput.Get(OVRInput.Button.PrimaryHandTrigger, OVRInput.Controller.RTouch) ? AdjustKey.FovDecrease : AdjustKey.FovIncrease);
-		}
-
-		if (adjustKey != 0)
-		{
-			byte[] bytes3 = BitConverter.GetBytes((int)adjustKey);
-			tcpServer.Broadcast(ADJUST_KEY, bytes3);
-			Debug.Log($"[CalibrationNetworkServer] broadcast ADJUST_KEY");
-		}
-
-		if (OVRInput.GetDown(OVRInput.Button.One | OVRInput.Button.PrimaryIndexTrigger, OVRInput.Controller.RTouch) || OVRInput.GetDown(OVRInput.Button.One | OVRInput.Button.PrimaryIndexTrigger, OVRInput.Controller.LTouch))
-		{
-			primaryButtonPressedTimes++;
-			if (tcpServer.HasConnectedClient())
+			AdjustKey adjustKey = AdjustKey.None;
+			if (OVRInput.Get(OVRInput.Button.PrimaryThumbstickUp, OVRInput.Controller.RTouch))
 			{
-				byte[] bytes4 = BitConverter.GetBytes(primaryButtonPressedTimes);
-				tcpServer.Broadcast(PRIMARY_BUTTON_PRESSED, bytes4);
+				adjustKey = ((!OVRInput.Get(OVRInput.Button.PrimaryHandTrigger, OVRInput.Controller.RTouch)) ? AdjustKey.Up : AdjustKey.PitchIncrease);
+			}
+			else if (OVRInput.Get(OVRInput.Button.PrimaryThumbstickDown, OVRInput.Controller.RTouch))
+			{
+				adjustKey = (OVRInput.Get(OVRInput.Button.PrimaryHandTrigger, OVRInput.Controller.RTouch) ? AdjustKey.PitchDecrease : AdjustKey.Down);
+			}
+			else if (OVRInput.Get(OVRInput.Button.PrimaryThumbstickLeft, OVRInput.Controller.RTouch))
+			{
+				adjustKey = (OVRInput.Get(OVRInput.Button.PrimaryHandTrigger, OVRInput.Controller.RTouch) ? AdjustKey.RollIncrease : AdjustKey.Left);
+			}
+			else if (OVRInput.Get(OVRInput.Button.PrimaryThumbstickRight, OVRInput.Controller.RTouch))
+			{
+				adjustKey = (OVRInput.Get(OVRInput.Button.PrimaryHandTrigger, OVRInput.Controller.RTouch) ? AdjustKey.RollDecrease : AdjustKey.Right);
+			}
+			else if (OVRInput.Get(OVRInput.Button.Two, OVRInput.Controller.RTouch))
+			{
+				adjustKey = (OVRInput.Get(OVRInput.Button.PrimaryHandTrigger, OVRInput.Controller.RTouch) ? AdjustKey.YawIncrease : AdjustKey.Forward);
+			}
+			else if (OVRInput.Get(OVRInput.Button.One, OVRInput.Controller.RTouch))
+			{
+				adjustKey = (OVRInput.Get(OVRInput.Button.PrimaryHandTrigger, OVRInput.Controller.RTouch) ? AdjustKey.YawDecrease : AdjustKey.Backward);
+			}
+			else if (OVRInput.Get(OVRInput.Button.PrimaryThumbstick, OVRInput.Controller.RTouch))
+			{
+				adjustKey = (OVRInput.Get(OVRInput.Button.PrimaryHandTrigger, OVRInput.Controller.RTouch) ? AdjustKey.FovDecrease : AdjustKey.FovIncrease);
+			}
+
+			if (adjustKey != 0)
+			{
+				tcpServer.Broadcast(ADJUST_KEY, BitConverter.GetBytes((int)adjustKey));
+				Debug.Log($"[CalibrationNetworkServer] broadcast ADJUST_KEY");
+			}
+
+			if (OVRInput.GetDown(OVRInput.Button.One | OVRInput.Button.PrimaryIndexTrigger, OVRInput.Controller.RTouch) || OVRInput.GetDown(OVRInput.Button.One | OVRInput.Button.PrimaryIndexTrigger, OVRInput.Controller.LTouch))
+			{
+				primaryButtonPressedTimes++;
+
+				tcpServer.Broadcast(PRIMARY_BUTTON_PRESSED, BitConverter.GetBytes(GetPrimaryButtonPressedTimes()));
 				Debug.Log($"[CalibrationNetworkServer] broadcast PRIMARY_BUTTON_PRESSED");
 			}
-		}
 
-		if (OVRInput.GetDown(OVRInput.Button.Two, OVRInput.Controller.RTouch) || OVRInput.GetDown(OVRInput.Button.Two, OVRInput.Controller.LTouch))
-		{
-			secondaryButtonPressedTimes++;
-			if (tcpServer.HasConnectedClient())
+			if (OVRInput.GetDown(OVRInput.Button.Two, OVRInput.Controller.RTouch) || OVRInput.GetDown(OVRInput.Button.Two, OVRInput.Controller.LTouch))
 			{
-				byte[] bytes5 = BitConverter.GetBytes(primaryButtonPressedTimes);
-				tcpServer.Broadcast(SECONDARY_BUTTON_PRESSED, bytes5);
+				secondaryButtonPressedTimes++;
+
+				tcpServer.Broadcast(SECONDARY_BUTTON_PRESSED, BitConverter.GetBytes(GetSecondaryButtonPressedTimes()));
 				Debug.Log($"[CalibrationNetworkServer] broadcast SECONDARY_BUTTON_PRESSED");
 			}
 		}
@@ -355,6 +314,25 @@ public class CalibrationNetworkServer : MonoBehaviour
 		}
 #else
 		File.Copy(from, to, true);
+#endif
+	}
+
+	private void DeleteFile(string path)
+	{
+#if UNITY_ANDROID
+		try
+		{
+			AndroidJavaObject activityClass = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+			AndroidJavaObject pluginInstanceClass = new AndroidJavaClass("com.insbyte.unityplugin.PluginInstance");
+
+			pluginInstanceClass.CallStatic("deleteFile", path);
+		}
+		catch (Exception ex)
+		{
+			Debug.LogError($"[CalibrationNetworkServer] {ex.Message}");
+		}
+#else
+		File.Delete(path);
 #endif
 	}
 
@@ -409,24 +387,18 @@ public class CalibrationNetworkServer : MonoBehaviour
 	}
 
 	int RequestedDataPermissions = 0;
-
-	bool CalibrationFilesUpToDate = false;
 	int NumFramesToStartRequest = 60;
 	private void RequestDataPermissions()
 	{
 		string[] RequiredPermissions = new string[]
 		{
+#if UNITY_ANDROID
 			"Android/data",
-			//$"Android/data/{UnityEngine.Application.identifier}/files"
+#endif
 		};
 
 		if (RequestedDataPermissions == RequiredPermissions.Length)
 		{
-			if (!CalibrationFilesUpToDate)
-			{
-				UpdateCalibrationFiles();
-				CalibrationFilesUpToDate = true;
-			}
 			return;
 		}
 
@@ -438,7 +410,10 @@ public class CalibrationNetworkServer : MonoBehaviour
 		NumFramesToStartRequest = 0;
 
 		if (HasFolderPermissions(Path.Combine(storageDir.FullName, RequiredPermissions[RequestedDataPermissions])))
+		{
 			RequestedDataPermissions++; // time to request next permission
+			return;
+		}
 
 		if(RequestedDataPermissions < RequiredPermissions.Length)
 			RequestFolderPermissions(Path.Combine(storageDir.FullName, RequiredPermissions[RequestedDataPermissions]));
@@ -483,7 +458,6 @@ public class CalibrationNetworkServer : MonoBehaviour
 				Permission.ExternalStorageWrite
 			});
 		}
-	
 #endif
 	}
 
@@ -498,11 +472,6 @@ public class CalibrationNetworkServer : MonoBehaviour
 
 	private List<DirectoryInfo> GetApplicationDirectories()
 	{
-		// TODO: wrap around these when called from rendering thread
-		// AndroidJNI.AttachCurrentThread();
-		//  call
-		// AndroidJNI.DetachCurrentThread();
-
 		List<DirectoryInfo> list = new List<DirectoryInfo>();
 
 		try
@@ -529,14 +498,6 @@ public class CalibrationNetworkServer : MonoBehaviour
 				{
 					string packageName = androidJavaObject3.Get<string>("packageName");
 					Debug.Log($"[CalibrationNetworkServer] *** non-system package {packageName} ***");
-
-					try
-					{
-						directoryInfo.CreateSubdirectory(packageName);
-					}
-					catch (Exception)
-					{
-					}
 
 					DirectoryInfo directoryInfo2 = new DirectoryInfo(Path.Combine(directoryInfo.FullName, packageName));
 					if (directoryInfo2.Exists)
@@ -600,34 +561,36 @@ public class CalibrationNetworkServer : MonoBehaviour
 	{
 		Debug.Log("[CalibrationNetworkServer] Network Payload Received");
 
-		string text = null;
 		switch (payloadType)
 		{
 			case CALIBRATION_DATA:
 			{
-				string @string = Encoding.UTF8.GetString(buffer, start, length);
+				string errorText = null;
+				string calibrationXmlData = Encoding.UTF8.GetString(buffer, start, length);
 				XmlDocument xmlDocument = new XmlDocument();
-				xmlDocument.LoadXml(@string);
+				xmlDocument.LoadXml(calibrationXmlData);
 
-				XmlNode xmlNode = xmlDocument.SelectSingleNode("opencv_storage/camera_id");
-				if (xmlNode != null)
+				XmlNode cameraNode = xmlDocument.SelectSingleNode("opencv_storage/camera_id");
+				if (cameraNode != null)
 				{
 #if UNITY_ANDROID
 					try
 					{
-
-						Convert.ToUInt32(xmlNode.Value);
+						Convert.ToUInt32(cameraNode.Value);
 						string fileName = Path.Combine(thisAppDir.FullName, "mrc.xml");
-						Directory.CreateDirectory(thisAppDir.FullName);
 
 						Debug.Log($"[CalibrationNetworkServer] Writing camera calibration to {fileName}");
-						File.WriteAllText(fileName, @string);
+						File.WriteAllText(fileName, calibrationXmlData);
 
-						CalibrationFilesUpToDate = false;
+						lock (actions)
+						{
+							actions.Enqueue(UpdateCalibrationFiles);
+							actions.Enqueue(PostCalibrationUpdate);
+						}
 					}
 					catch (Exception ex3)
 					{
-						text = "Could not write to files\n" + ex3.Message;
+						errorText = "Could not write file\n" + ex3.Message;
 					}
 #else
 					try
@@ -642,36 +605,82 @@ public class CalibrationNetworkServer : MonoBehaviour
 				}
 				else
 				{
-					text = "XML or Camera ID invalid";
+					errorText = "XML or Camera ID invalid";
 				}
+
+				if (errorText != null)
+				{
+					Debug.Log($"[CalibrationNetworkServer] {errorText}");
+				}
+
+				tcpServer.Broadcast(OPERATION_COMPLETE, (errorText != null) ? Encoding.UTF8.GetBytes(errorText) : new byte[0]);
+				Debug.Log($"[CalibrationNetworkServer] broadcast OPERATION_COMPLETE");
 				break;
 			}
 			case CLEAR_CALIBRATION:
-				try
+			{
+				lock (actions)
 				{
-					foreach (DirectoryInfo appDir2 in appDirs)
-					{
-						DirectoryInfo directoryInfo = new DirectoryInfo(Path.Combine(appDir2.FullName, "files"));
-						if (directoryInfo.Exists)
-						{
-							Debug.Log($"[CalibrationNetworkServer] Deleting camera calibration config from {Path.Combine(directoryInfo.FullName, "mrc.xml")}");
-							File.Delete(Path.Combine(directoryInfo.FullName, "mrc.xml"));
-						}
-					}
-				}
-				catch (Exception)
-				{
-					text = "Could not delete files";
+					actions.Enqueue(TryDeleteCalibrationData);
 				}
 				break;
+			}
 		}
+	}
 
-		if (text != null)
+	private void UpdateCalibrationFiles()
+	{
+		string errorText = null;
+		FileInfo fileInfo = new FileInfo(Path.Combine(thisAppDir.FullName, "mrc.xml"));
+		if (fileInfo.Exists)
 		{
-			Debug.Log($"[CalibrationNetworkServer] {text}");
+			Debug.Log("[CalibrationNetworkServer] Saved MRC Calibration Found, applying to apps");
+
+			foreach (DirectoryInfo appDir in appDirs)
+			{
+				if (new DirectoryInfo(Path.Combine(appDir.FullName, "files")).Exists)
+				{
+					try
+					{
+						CopyFile(fileInfo.FullName, Path.Combine(appDir.FullName, "files/mrc.xml"));
+						Debug.Log("[CalibrationNetworkServer] MRC calibration copied to " + Path.Combine(appDir.FullName, "files/mrc.xml"));
+					}
+					catch (Exception)
+					{
+						Debug.Log("[CalibrationNetworkServer] Cannot copy MRC config to " + Path.Combine(appDir.FullName, "files/mrc.xml"));
+					}
+				}
+				else
+				{
+					Debug.Log($"[CalibrationNetworkServer] {Path.Combine(appDir.FullName, "files")} is not valid");
+				}
+			}
 		}
 
-		PostCalibrationUpdate();
+		tcpServer.Broadcast(OPERATION_COMPLETE, (errorText != null) ? Encoding.UTF8.GetBytes(errorText) : new byte[0]);
+		Debug.Log($"[CalibrationNetworkServer] broadcast OPERATION_COMPLETE");
+	}
+
+	private void TryDeleteCalibrationData()
+	{
+		string text = null;
+		try
+		{
+			foreach (DirectoryInfo appDir2 in appDirs)
+			{
+				DirectoryInfo directoryInfo = new DirectoryInfo(Path.Combine(appDir2.FullName, "files"));
+				if (directoryInfo.Exists)
+				{
+					Debug.Log($"[CalibrationNetworkServer] Deleting camera calibration config from {Path.Combine(directoryInfo.FullName, "mrc.xml")}");
+					DeleteFile(Path.Combine(directoryInfo.FullName, "mrc.xml"));
+				}
+			}
+		}
+		catch (Exception)
+		{
+			text = "Could not delete files";
+		}
+
 		tcpServer.Broadcast(OPERATION_COMPLETE, (text != null) ? Encoding.UTF8.GetBytes(text) : new byte[0]);
 		Debug.Log($"[CalibrationNetworkServer] broadcast OPERATION_COMPLETE");
 	}

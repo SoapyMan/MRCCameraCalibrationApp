@@ -115,6 +115,18 @@ public class PluginInstance
         }
     }
 
+    public static void deleteFile(String path)
+    {
+        try {
+            Log.d("PluginInstance", "deleteFile " + path);
+
+            DocumentFile file = getAccessToFile(path, false);
+            file.delete();
+        } catch (Exception e) {
+            Log.e("PluginInstance", "deleteFile failed", e);
+        }
+    }
+
     private static Uri getContentFromPath(String path, boolean tree)
     {
         String suffix = path;

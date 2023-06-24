@@ -16,7 +16,7 @@ public class MRCNetworkDiscovery : MonoBehaviour
 
 	private string broadcastMessage = "";
 
-	public float timeInterval = 2.0f;
+	private float timeInterval = 1.0f;
 
 	private float lastBroadcastTime;
 	private UdpClient udpBroadcaster;
@@ -31,8 +31,8 @@ public class MRCNetworkDiscovery : MonoBehaviour
 		if (udpBroadcaster == null)
 			return;
 
-		float realtimeSinceStartup = Time.realtimeSinceStartup;
-		if (realtimeSinceStartup - lastBroadcastTime > timeInterval)
+		float realtimeSinceStartup = Time.timeSinceLevelLoad;
+		if (realtimeSinceStartup > lastBroadcastTime + timeInterval)
 		{
 			var msg = CreateMessage();
 
