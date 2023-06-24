@@ -9,7 +9,6 @@ using System.Linq;
 
 public class MRCNetworkDiscovery : MonoBehaviour
 {
-	private const int hostId = -1;
 	private const int broacastKey = 2222;
 	private const int broadcastVersion = 1;
 	private const int broadcastSubVersion = 1;
@@ -37,25 +36,9 @@ public class MRCNetworkDiscovery : MonoBehaviour
 		{
 			var msg = CreateMessage();
 
-			int numInterfacesBroadcasted = 0;
+			udpBroadcaster.Send(msg, msg.Length, new IPEndPoint(new IPAddress(new byte[] { 255, 255, 255, 255 }), broacastPort));
 
-			var interfaces = NetworkInterface.GetAllNetworkInterfaces();
-			foreach (var iface in interfaces)
-			{
-				if (iface.GetIPProperties().UnicastAddresses.Count == 0)
-					continue;
-
-				// usually gateway addresses are have same base
-				var addr = iface.GetIPProperties().UnicastAddresses[0].Address;
-				if (addr.AddressFamily != AddressFamily.InterNetwork)
-					continue;
-
-				var broadcastIp = new IPAddress(addr.GetAddressBytes().Take(3).Concat(new[] { (byte)255 }).ToArray());
-				udpBroadcaster.Send(msg, msg.Length, broadcastIp.ToString(), broacastPort);
-				numInterfacesBroadcasted++;
-			}
-
-			Debug.Log($"[MRCNetworkDiscovery] Broadcasted message over {numInterfacesBroadcasted} interfaces");
+			Debug.Log($"[MRCNetworkDiscovery] Broadcasted message over all interfaces");
 
 			lastBroadcastTime = realtimeSinceStartup;
 		}
@@ -90,13 +73,11 @@ public class MRCNetworkDiscovery : MonoBehaviour
 
 	public void StartBroadcast()
 	{
-		/*
 		udpBroadcaster = new UdpClient();
 		udpBroadcaster.MulticastLoopback = true;
 		udpBroadcaster.EnableBroadcast = true;
 		
 		Debug.Log("[MRCNetworkDiscovery] Server Created with default port");
-		*/
 	}
 
 	public void StopBroadcast()
