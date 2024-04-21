@@ -158,7 +158,7 @@ public class CalibrationNetworkServer : MonoBehaviour
 
 	private void Update()
 	{
-		RequestDataPermissions();
+		//RequestDataPermissions();
 
 		lock(actions)
 		{
