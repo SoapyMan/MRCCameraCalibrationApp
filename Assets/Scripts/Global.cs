@@ -8,7 +8,7 @@ public class Global : MonoBehaviour
 
 	//private OVRCameraRig cameraRig;
 
-	public TextMesh statusText;
+	public TextMesh[] statusText;
 
 	private void Start()
 	{
@@ -32,14 +32,16 @@ public class Global : MonoBehaviour
 
 	private void Update()
 	{
-		if (statusText != null)
-		{
-			string empty = string.Empty;
-			empty = empty + "IP address(es): " + LocalIPAddress() + "\n";
-			CalibrationNetworkServer component = GetComponent<CalibrationNetworkServer>();
-			empty = ((!(component == null)) ? (empty + (component.HasConnectedClient() ? "Camera Calibration Tool: Connected" : "Camera Calibration Tool: Not Connected")) : (empty + "Error: no CalibrationNetworkServer attached"));
-			statusText.text = empty;
-		}
+		if (statusText == null)
+			return;
+
+		string empty = string.Empty;
+		empty = empty + "IP address(es): " + LocalIPAddress() + "\n";
+		CalibrationNetworkServer component = GetComponent<CalibrationNetworkServer>();
+		empty = ((!(component == null)) ? (empty + (component.HasConnectedClient() ? "Camera Calibration Tool: Connected" : "Camera Calibration Tool: Not Connected")) : (empty + "Error: no CalibrationNetworkServer attached"));
+			
+		foreach(var st in statusText)
+			st.text = empty;
 	}
 
 	public static string LocalIPAddress()
