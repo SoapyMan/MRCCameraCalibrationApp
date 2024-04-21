@@ -3,6 +3,9 @@ This is a reverse-engineered and improved version of Oculus MRC Camera Calibrati
 
 It is aimed to be compatible both with [Oculus PC MRC app](https://developer.oculus.com/downloads/package/mixed-reality-capture-tools/) and [Reality Mixer](https://github.com/fabio914/RealityMixer) and maybe other Mixed Reality applications.
 
+# IMPORTANT UPDATE
+As of April 2024, the app no longer can save mrc.xml and I'm once again figuring out a workaround.
+
 # WORK IN PROGRESS
 
 What is done:
